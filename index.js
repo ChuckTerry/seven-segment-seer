@@ -1,4 +1,5 @@
 import { SegmentDisplayReader } from './SegmentDisplayReader.js';
+import { SegmentDisplayReaderConfiguration } from './SegmentDisplayReaderConfiguration.js';
 
 
 const rotate180 = localStorage.getItem('rotate180') !== 'false';
@@ -28,7 +29,12 @@ if (video instanceof HTMLVideoElement === false
     throw new Error('Video element not found');
 }
 
-if (!(canvas instanceof HTMLCanvasElement) || !(calibrateButton instanceof HTMLButtonElement) ||!output || !history || !message) {
+if (!(canvas instanceof HTMLCanvasElement)
+    || !(calibrateButton instanceof HTMLButtonElement)
+    || !output
+    || !history
+    || !message
+) {
     throw new Error('GUI elements not found');
 }
 
@@ -36,34 +42,35 @@ if (calibrateButton instanceof HTMLButtonElement === false) {
     throw new Error('Calibrate button not found');
 }
 
-//if (video instanceof HTMLVideoElement === false) {
-//    throw new Error('No Video element found');
-//}
-
 if (toggleDebugButton instanceof HTMLButtonElement === false) {
     throw new Error('Debug toggle button not found');
+}
+
+if (configButton instanceof HTMLButtonElement === false) {
+    throw new Error('Config button not found');
+}
+
+if (closeConfigButton instanceof HTMLButtonElement === false) {
+    throw new Error('Close config button not found');
+}
+
+if (configSlideover instanceof HTMLDivElement === false) {
+    throw new Error('Config slideover not found');
 }
 
 if (rotate180Checkbox instanceof HTMLInputElement === false) {
     throw new Error('Rotate 180 checkbox not found');
 }
 
-const reader = new SegmentDisplayReader(video, canvas);
-// Config Button & Slideover
-if (configButton instanceof HTMLButtonElement === false) {
-    throw new Error('Config button not found');
-}
+const config = new SegmentDisplayReaderConfiguration();
+config.grayThreshold = 25;
+config.decimalPointFloodFillThreshold = 25;
 
-if (configSlideover instanceof HTMLDivElement === false) {
-    throw new Error('Config slideover not found');
-}
+const reader = new SegmentDisplayReader(video, canvas, config);
+
 configButton.addEventListener('click', () => {
     configSlideover.classList.add('open');
 });
-
-if (closeConfigButton instanceof HTMLButtonElement === false) {
-    throw new Error('Close config button not found');
-}
 
 closeConfigButton.addEventListener('click', () => {
     configSlideover.classList.remove('open');
@@ -71,17 +78,18 @@ closeConfigButton.addEventListener('click', () => {
 
 document.addEventListener('click', (event) => {
     const target = event.target;
-    if (target instanceof Node &&
-        configSlideover.classList.contains('open') &&
-        !configSlideover.contains(target) &&
-        target !== configButton) {
+    if (target instanceof Node
+        && configSlideover.classList.contains('open')
+        && !configSlideover.contains(target)
+        && target !== configButton
+    ) {
         configSlideover.classList.remove('open');
     }
 });
 
-// Rotation
 reader.rotate180 = rotate180;
 rotate180Checkbox.checked = rotate180;
+
 if (video) {
     video.classList.toggle('rotated', rotate180);
 }
@@ -106,9 +114,14 @@ toggleDebugButton.addEventListener('click', () => {
     video.classList[value ? 'add' : 'remove']('hidden');
 });
 
+let messageHidden = false;
 reader.addEventListener('output', (event) => {
-    console.log('Output event received @ index.js');
     const { value } = /** @type {CustomEvent} */ (event).detail;
+    if (!messageHidden) {
+        calibrateButton.innerText = 'Recalibrate';
+        message.classList.add('hidden');
+        messageHidden = true;
+    }
     output.innerText = value;
     const span = document.createElement('span');
     span.innerText = value;
@@ -116,10 +129,15 @@ reader.addEventListener('output', (event) => {
     history.prepend(document.createElement('br'));
 });
 
-reader.addEventListener('statusMessage', (event) => {
-    message.innerText = /** @type {CustomEvent} */(event).detail.message;
+
+calibrateButton.addEventListener('click', () => {
+    if (calibrateButton.innerText === 'Recalibrate') {
+        reader.calibrated = false;
+        message.classList.remove('hidden');
+        messageHidden = false;
+        calibrateButton.innerText = 'Capture Calibration Image';
+
+    } else {
+        reader.captureCalibrationImage();
+    }
 });
-
-reader.addEventListener('readStart', () => console.log('Reading started'));
-
-calibrateButton.addEventListener('click', () => reader.captureCalibrationImage());
