@@ -359,7 +359,7 @@ export class SegmentDisplayReader extends EventTarget {
         const detectablePixelArray = this.createPixelArray(0);
 
         // For every pixel, compare its brightness in the "all on" vs "all off" images
-        // If it's brightness is over a certain threshold, we mark it as "detectable"
+        // If its brightness is over a certain threshold, we mark it as "detectable"
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width; x++) {
                 const onGray = this.getPixelGrayValue(litImage, x, y);
