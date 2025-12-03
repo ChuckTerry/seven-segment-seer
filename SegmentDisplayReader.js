@@ -347,16 +347,16 @@ export class SegmentDisplayReader extends EventTarget {
         const { height, width } = canvas;
 
         // Reset calibration references to match the current canvas size
-        this.grayArray = create2dArray(height, width, 0);
-        this.litReference = create2dArray(height, width, 0);
-        this.unlitReference = create2dArray(height, width, 0);
-        this.backgroundMask = create2dArray(height, width, 0);
+        this.grayArray = this.createPixelArray(0);
+        this.litReference = this.createPixelArray(0);
+        this.unlitReference = this.createPixelArray(0);
+        this.backgroundMask = this.createPixelArray(0);
 
         // Pick which calibration frame is lit vs unlit based on total brightness so order doesn't matter.
         const [litImage, unlitImage] = this.getOrderedCalibrationImages();
 
         /** @type {Bitmask2d} */
-        const detectablePixelArray = create2dArray(height, width, 0);
+        const detectablePixelArray = this.createPixelArray(0);
 
         // For every pixel, compare its brightness in the "all on" vs "all off" images
         // If it's brightness is over a certain threshold, we mark it as "detectable"
