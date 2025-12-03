@@ -132,7 +132,7 @@ reader.addEventListener('output', (event) => {
 
 calibrateButton.addEventListener('click', () => {
     if (calibrateButton.innerText === 'Recalibrate') {
-        reader.calibrated = false;
+        reader.resetCalibration();
         message.classList.remove('hidden');
         messageHidden = false;
         calibrateButton.innerText = 'Capture Calibration Image';
