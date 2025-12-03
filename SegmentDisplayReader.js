@@ -225,6 +225,10 @@ export class SegmentDisplayReader extends EventTarget {
                 this.readDisplays();
             }
         });
+        
+        window.addEventListener('beforeunload', () => {
+            this.worker.terminate();
+        })
     }
 
     /**
