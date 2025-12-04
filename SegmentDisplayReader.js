@@ -1,3 +1,5 @@
+import { SegmentDisplayReaderConfiguration } from './SegmentDisplayReaderConfiguration.js';
+
 /**
  * @typedef {Object} Pixel
  * @property {number} r - Red component
@@ -16,6 +18,10 @@
 /** @typedef {SevenSegmentDisplay} SSD */
 
 /** @typedef {[SSD, SSD, SSD, SSD, SSD, SSD]} OutputDisplays */
+
+/**
+ * @typedef {HTMLVideoElement|VideoFrame|SVGImageElement|HTMLCanvasElement|OffscreenCanvas|HTMLImageElement|ImageBitmap} StreamSource
+ */
 
 /** 
  * @typedef {Object} BoundingRect
@@ -56,99 +62,13 @@ function create2dArray(height, width, fillValue) {
     });
 }
 
-class SegmentDisplayReaderConfiguration {
-    #debugMaskColors;
-    #decimalPointFloodFillThreshold;
-    #grayThreshold;
-    #rotate180;
-    constructor() {
-        /**
-         * The minimum required difference in gray value to consider a pixel part
-         * of the decimal point during flood fill. pixelGrayValue = (r + g + b) / 3
-         * @type {number} 
-         */
-        this.#decimalPointFloodFillThreshold = 40;
-        /**
-         * The minimum required difference in gray value to consider a pixel part
-         * of a segment. pixelGrayValue = (r + g + b) / 3
-         * @type {number} 
-         */
-        this.#grayThreshold = 90;
-
-        /**
-         * Whether to rotate the video feed 180 degrees.
-         * @type {boolean}
-         */
-        this.#rotate180 = true;
-
-        /** @type {Array<Array<Pixel>>} */
-        this.#debugMaskColors = [[
-            { r: 107, g: 0, b: 17 },
-            { r: 217, g: 26, b: 33 },
-        ], [
-            { r: 115, g: 57, b: 18 },
-            { r: 255, g: 127, b: 39 },
-        ], [
-            { r: 92, g: 87, b: 0 },
-            { r: 255, g: 242, b: 0 },
-        ], [
-            { r: 15, g: 79, b: 34 },
-            { r: 34, g: 177, b: 76 },
-        ], [
-            { r: 0, g: 62, b: 89 },
-            { r: 0, g: 162, b: 232 },
-        ], [
-            { r: 71, g: 32, b: 71 },
-            { r: 163, g: 73, b: 164 },
-        ]];
-    }
-
-    get debugMaskColors() {
-        return this.#debugMaskColors;
-    }
-
-    set debugMaskColors(value) {
-        this.#debugMaskColors = value;
-    }
-
-    get decimalPointFloodFillThreshold() {
-        return this.#decimalPointFloodFillThreshold;
-    }
-
-    set decimalPointFloodFillThreshold(value) {
-        if (!isNaN(value) && value > 0 && value < 255) {
-            this.#decimalPointFloodFillThreshold = value;
-        }
-    }
-
-    get grayThreshold() {
-        return this.#grayThreshold;
-    }
-
-    set grayThreshold(value) {
-        if (!isNaN(value) && value > 0 && value < 255) {
-            this.#grayThreshold = value;
-        }
-    }
-
-    get rotate180() {
-        return this.#rotate180;
-    }
-
-    set rotate180(value) {
-        if (typeof value === 'boolean') {
-            this.#rotate180 = value;
-        }
-    }
-}
-
 const ERROR_STRINGS_US = {
     noCanvas: 'SegmentDisplayReader constructor requires an HTML canvas element as the second parameter.',
     badCanvas: 'SegmentDisplayReader constructor called with an invalid HTMLCanvasElement.',
     badContext: 'Unable to get 2D context from provided canvas element.',
     badVideoElement: 'Video element for webcam feed not found in document.',
     noVideoElement: 'SegmentDisplayReader constructor requires a video element as the first parameter.'
-}
+};
 
 /**
  * @class SegmentDisplayReader
@@ -187,7 +107,6 @@ export class SegmentDisplayReader extends EventTarget {
         62: 'U',
         63: '0',
         64: '-',
-        78: 't',
         79: '3',
         80: 'r',
         83: '?',
@@ -218,7 +137,7 @@ export class SegmentDisplayReader extends EventTarget {
     /**
      * Creates a new SegmentDisplayReader instance.
      * 
-     * @param {HTMLVideoElement|VideoFrame|SVGImageElement|HTMLCanvasElement|OffscreenCanvas|HTMLImageElement|ImageBitmap} source The video source element
+     * @param {StreamSource} source The video source element
      * @param {HTMLCanvasElement} canvas 
      */
     constructor(source, canvas = document.createElement('canvas'), configuration = new SegmentDisplayReaderConfiguration()) {
@@ -238,9 +157,7 @@ export class SegmentDisplayReader extends EventTarget {
         this.lastDisplay = null;
         this.calibrated = false;
         this.showDebugMask = false;
-        this.interval = undefined;
         this.consistentOutputCount = 0;
-        
 
         if (!(configuration instanceof SegmentDisplayReaderConfiguration)) {
             console.warn('Invalid configuration object provided, using default configuration.');
@@ -264,7 +181,7 @@ export class SegmentDisplayReader extends EventTarget {
             navigator.mediaDevices.getUserMedia({
                 audio: false, video: true
             }).then((stream) => {
-                /** @type HTMLVideoElement */ (this.source).srcObject = stream;
+                /** @type {HTMLVideoElement} */ (this.source).srcObject = stream;
             }).catch((error) => {
                 console.error('Error accessing webcam:', error);
             });
@@ -284,7 +201,7 @@ export class SegmentDisplayReader extends EventTarget {
             throw new Error(ERROR_STRINGS_US.badVideoElement);
         }
 
-        
+
         /** @type {OutputDisplays} */
         this.segmentSamples = [
             [[], [], [], [], [], [], [], []],
@@ -296,6 +213,22 @@ export class SegmentDisplayReader extends EventTarget {
         ];
 
         this.grayArray = create2dArray(this.canvas.height, this.canvas.width, 0);
+        this.litReference = this.createPixelArray(0);
+        this.unlitReference = this.createPixelArray(0);
+        this.backgroundMask = this.createPixelArray(0);
+
+        this.worker = new Worker('./timingWorker.js');
+        this.worker.addEventListener('message', (event) => {
+            if (this.calibrated === false) {
+                this.worker.postMessage('readStop');
+            } else if (event.data === 'read') {
+                this.readDisplays();
+            }
+        });
+        
+        window.addEventListener('beforeunload', () => {
+            this.worker.terminate();
+        });
     }
 
     /**
@@ -306,10 +239,8 @@ export class SegmentDisplayReader extends EventTarget {
     attemptCalibration() {
         const success = this.determineLocations();
         if (success) {
+            this.worker.postMessage('readStart');
             this.calibrated = true;
-            this.interval = setInterval(() => {
-                this.readDisplays();
-            }, 100);
         }
         return success;
     }
@@ -333,14 +264,14 @@ export class SegmentDisplayReader extends EventTarget {
     /**
      * Captures a calibration image for later analysis.
      * 
+     * @param {boolean} [autoAttemptCalibration=true] Whether to automatically attempt calibration after capturing two images
      */
     captureCalibrationImage(autoAttemptCalibration = true) {
         const initialLength = this.calibrationImages.length;
         if (initialLength === 2) {
-            this.calibrationImages.length = 0;
+            this.resetCalibration();
             this.calibrationImages.push(this.captureImageData());
         } else if (initialLength < 2) {
-            clearInterval(this.interval);
             this.calibrationImages.push(this.captureImageData());
             if (this.calibrationImages.length === 2 && autoAttemptCalibration) {
                 this.attemptCalibration();
@@ -383,8 +314,9 @@ export class SegmentDisplayReader extends EventTarget {
      * Applies a debug mask overlay to visualize segment detection.
      * 
      * @param {ImageData} currentData The current image data
+     * @param {number} ambientOffset The offset value to adjust ambient light threshold for segment detection
      */
-    debugMask(currentData) {
+    debugMask(currentData, ambientOffset = 0) {
         const { width } = this.canvas;
         const colors = this.debugMaskColors;
 
@@ -397,7 +329,7 @@ export class SegmentDisplayReader extends EventTarget {
                 for (let index = 0; index < length; index++) {
                     const [x, y] = pixels[index];
                     const currentGray = this.getPixelGrayValue(currentData, x, y);
-                    const isOn = currentGray > this.grayArray[y][x];
+                    const isOn = this.isPixelLit(currentGray, x, y, ambientOffset);
                     const { r, g, b } = colors[digit][isOn ? 1 : 0];
                     const pixelIndex = (y * width + x) * 4;
                     currentData.data[pixelIndex] = r;
@@ -419,17 +351,28 @@ export class SegmentDisplayReader extends EventTarget {
         const { canvas, grayThreshold } = this;
         const { height, width } = canvas;
 
+        // Reset calibration references to match the current canvas size
+        this.grayArray = this.createPixelArray(0);
+        this.litReference = this.createPixelArray(0);
+        this.unlitReference = this.createPixelArray(0);
+        this.backgroundMask = this.createPixelArray(0);
+
+        // Pick which calibration frame is lit vs unlit based on total brightness so order doesn't matter.
+        const [litImage, unlitImage] = this.getOrderedCalibrationImages();
+
         /** @type {Bitmask2d} */
-        const detectablePixelArray = create2dArray(height, width, 0);
+        const detectablePixelArray = this.createPixelArray(0);
 
         // For every pixel, compare its brightness in the "all on" vs "all off" images
-        // If it's brightness is over a certain threshold, we mark it as "detectable"
+        // If its brightness is over a certain threshold, we mark it as "detectable"
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width; x++) {
-                const onGray = this.getPixelGrayValue(this.calibrationImages[0], x, y);
-                const offGray = this.getPixelGrayValue(this.calibrationImages[1], x, y);
+                const onGray = this.getPixelGrayValue(litImage, x, y);
+                const offGray = this.getPixelGrayValue(unlitImage, x, y);
                 const difference = Math.abs(onGray - offGray);
-                this.grayArray[y][x] = (onGray + offGray) / 2;
+                this.litReference[y][x] = onGray;
+                this.unlitReference[y][x] = offGray;
+                this.grayArray[y][x] = difference;
                 if (difference > grayThreshold) {
                     detectablePixelArray[y][x] = 1;
                 }
@@ -448,6 +391,7 @@ export class SegmentDisplayReader extends EventTarget {
             return detectablePixelArray[y][x] === 0;
         };
         const backgroundPixels = this.generateBitmask(detectablePixelArray, backgroundMatchFunction);
+        this.backgroundMask = backgroundPixels;
 
         // Check every pixel in our image
         for (let y = 0; y < height; y++) {
@@ -466,9 +410,8 @@ export class SegmentDisplayReader extends EventTarget {
 
         // If we didn't find the right number of holes, calibration failed, reset everything
         if (holeComponents.length !== 12) {
-            alert('Not enough holes detected. Please ensure all segments are visible and the empty areas are distinct.');
-            this.calibrationImages.length = 0;
-            this.grayArray = create2dArray(height, width, 0);
+            alert('Not enough holes detected. Please ensure all segments are visible and in focus, then try calibrating again.');
+            this.resetCalibration();
             return false;
         }
 
@@ -509,7 +452,7 @@ export class SegmentDisplayReader extends EventTarget {
 
         holeComponents.sort((a, b) => {
             return (a.centerX ?? 0) - (b.centerX ?? 0);
-        })
+        });
 
         let centers = [];
         for (let index = 0; index < k; index++) {
@@ -620,7 +563,12 @@ export class SegmentDisplayReader extends EventTarget {
              * @param {number} y 
              */
             const addToSeg = (index, x, y) => {
-                if (x >= 0 && x < width && y >= 0 && y < height && detectablePixelArray[y][x] === 1) {
+                if (x > -1
+                    && x < width
+                    && y > -1
+                    && y < height
+                    && detectablePixelArray[y][x] === 1
+                ) {
                     segments[index].push([x, y]);
                 }
             };
@@ -682,6 +630,47 @@ export class SegmentDisplayReader extends EventTarget {
     }
 
     /**
+     * Estimate a consistent brightness offset between the calibration images and the current frame.
+     * Samples background pixels so we can normalize frames shot in brighter or darker conditions.
+     * 
+     * @param {ImageData} currentData
+     * @returns {number} The estimated brightness offset in grayscale units between the calibration images and the current frame.
+     */
+    estimateAmbientOffset(currentData) {
+        if (!this.backgroundMask || !this.backgroundMask.length) {
+            return 0;
+        }
+
+        const { width, height } = this.canvas;
+        // Keep the sampling light so it can run each frame without impacting performance.
+        const stepY = Math.max(1, Math.floor(height / 40));
+        const stepX = Math.max(1, Math.floor(width / 40));
+        let sum = 0;
+        let count = 0;
+
+        for (let y = 0; y < height; y += stepY) {
+            const maskRow = this.backgroundMask[y];
+            const unlitRow = this.unlitReference[y];
+            if (!maskRow || !unlitRow) {
+                continue;
+            }
+            for (let x = 0; x < width; x += stepX) {
+                if (maskRow[x]) {
+                    const pixelGray = this.getPixelGrayValue(currentData, x, y);
+                    sum += pixelGray - unlitRow[x];
+                    count++;
+                }
+            }
+        }
+
+        if (count === 0) {
+            return 0;
+        }
+
+        return sum / count;
+    }
+
+    /**
      * Finds a connected hole component using flood fill.
      * 
      * @param {Bitmask2d} pixelArray 
@@ -728,7 +717,10 @@ export class SegmentDisplayReader extends EventTarget {
         // Sometimes, especially when camera lens is blurry, the dp pixels bleed over to the other segments and end up
         // tracing around their edges.  To prevent this, we'll only keep pixels that are very close to the starting point.
         const sanitizedMaskCoordinates = maskedCoordinates.filter(([x, y]) => {
-            return x >= startX - 5 && x <= startX + 5 && y >= startY - 5 && y <= startY + 5;
+            return x > startX - 6
+                && x < startX + 6
+                && y > startY - 6
+                && y < startY + 6;
         });
         return sanitizedMaskCoordinates;
     }
@@ -762,8 +754,8 @@ export class SegmentDisplayReader extends EventTarget {
         const visited = new Set();
         const directions = [
             [-1, -1], [0, -1], [1, -1],
-            [-1,  0],          [1,  0],
-            [-1,  1], [0,  1], [1,  1]
+            [-1, 0], [1, 0],
+            [-1, 1], [0, 1], [1, 1]
         ];
 
         while (queue.length) {
@@ -793,6 +785,30 @@ export class SegmentDisplayReader extends EventTarget {
     }
 
     /**
+     * Returns the lit/unlit images in correct order by comparing overall brightness.
+     * 
+     * @returns {[ImageData, ImageData]}
+     */
+    getOrderedCalibrationImages() {
+        const [imageA, imageB] = this.calibrationImages;
+        if (!imageA || !imageB) {
+            return [imageA, imageB];
+        }
+        const aData = imageA.data;
+        const bData = imageB.data;
+        const length = aData.length;
+        let sumA = 0;
+        let sumB = 0;
+        for (let index = 0; index < length; index += 4) {
+            sumA += aData[index] + aData[index + 1] + aData[index + 2];
+            sumB += bData[index] + bData[index + 1] + bData[index + 2];
+        }
+        return sumA > sumB
+            ? [imageA, imageB]
+            : [imageB, imageA];
+    }
+
+    /**
      * Calculates the grayscale value of the pixel at the specified coordinates from the image data.
      * 
      * @param {ImageData} pixelGrid 
@@ -808,6 +824,35 @@ export class SegmentDisplayReader extends EventTarget {
     }
 
     /**
+     * Determines if a pixel is closer to the lit or unlit calibration sample, normalized for brightness shifts.
+     * 
+     * @param {number} pixelGray Current grayscale value
+     * @param {number} x X coordinate
+     * @param {number} y Y coordinate
+     * @param {number} [ambientOffset=0] Adjustment to account for ambient light change
+     * @returns {boolean}
+     */
+    isPixelLit(pixelGray, x, y, ambientOffset = 0) {
+        const litRow = this.litReference[y];
+        const unlitRow = this.unlitReference[y];
+
+        if (!litRow || !unlitRow) {
+            const fallbackRow = this.grayArray[y];
+            return pixelGray > (fallbackRow ? fallbackRow[x] : 0);
+        }
+
+        const litGray = litRow[x];
+        const unlitGray = unlitRow[x];
+        const adjustedGray = pixelGray - ambientOffset;
+
+        const range = Math.max(Math.abs(litGray - unlitGray), 1);
+        const distanceToLit = Math.abs(adjustedGray - litGray) / range;
+        const distanceToUnlit = Math.abs(adjustedGray - unlitGray) / range;
+
+        return distanceToLit <= distanceToUnlit;
+    }
+
+    /**
      * Reads the current display values from the video feed.
      * 
      * @fires SegmentDisplayReader#change
@@ -815,6 +860,7 @@ export class SegmentDisplayReader extends EventTarget {
      */
     readDisplays() {
         const currentData = this.captureImageData();
+        const ambientOffset = this.estimateAmbientOffset(currentData);
         let result = '';
         for (let digit = 0; digit < 6; digit++) {
             const digitSegments = this.segmentSamples[digit];
@@ -829,8 +875,7 @@ export class SegmentDisplayReader extends EventTarget {
                 for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex++) {
                     const [x, y] = pixels[pixelIndex];
                     const pixelGray = this.getPixelGrayValue(currentData, x, y);
-                    const grayValue = this.grayArray[y][x];
-                    if (pixelGray * 1.2 > grayValue) {
+                    if (this.isPixelLit(pixelGray, x, y, ambientOffset)) {
                         if (--toLight === 0) {
                             if (segment === 7) {
                                 lightDecimalPoint = true;
@@ -872,7 +917,7 @@ export class SegmentDisplayReader extends EventTarget {
         }
 
         if (this.showDebugMask) {
-            this.debugMask(currentData);
+            this.debugMask(currentData, ambientOffset);
         }
     }
 
@@ -881,9 +926,9 @@ export class SegmentDisplayReader extends EventTarget {
      */
     refine() {
         const currentData = this.captureImageData();
+        const ambientOffset = this.estimateAmbientOffset(currentData);
         for (let digit = 0; digit < 6; digit++) {
             const digitSegments = this.segmentSamples[digit];
-
             for (let segment = 0; segment < 8; segment++) {
                 const litPixels = [];
                 const offPixels = [];
@@ -893,8 +938,7 @@ export class SegmentDisplayReader extends EventTarget {
                 for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex++) {
                     const [x, y] = pixels[pixelIndex];
                     const pixelGray = this.getPixelGrayValue(currentData, x, y);
-                    const grayValue = this.grayArray[y][x];
-                    if (pixelGray * 1.2 > grayValue) {
+                    if (this.isPixelLit(pixelGray, x, y, ambientOffset)) {
                         litPixels.push([x, y]);
                     } else {
                         offPixels.push([x, y]);
@@ -908,5 +952,28 @@ export class SegmentDisplayReader extends EventTarget {
                 }
             }
         }
+    }
+
+    /**
+     * Resets the calibration state.
+     */
+    resetCalibration() {
+        this.worker.postMessage('readStop');
+        this.backgroundMask = this.createPixelArray(0);
+        this.calibrated = false;
+        this.calibrationImages.length = 0;
+        this.consistentOutputCount = 0;
+        this.grayArray = this.createPixelArray(0);
+        this.lastDisplay = null;
+        this.litReference = this.createPixelArray(0);
+        this.segmentSamples = [
+            [[], [], [], [], [], [], [], []],
+            [[], [], [], [], [], [], [], []],
+            [[], [], [], [], [], [], [], []],
+            [[], [], [], [], [], [], [], []],
+            [[], [], [], [], [], [], [], []],
+            [[], [], [], [], [], [], [], []]
+        ];
+        this.unlitReference = this.createPixelArray(0);
     }
 }

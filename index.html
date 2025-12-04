@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,13 +7,11 @@
         <link rel="stylesheet" href="styles.css">
         <script src="index.js" type="module"></script>
     </head>
-
     <body>
         <!-- Config button in top right -->
         <button id="config-button" class="config-button" type="button" aria-label="Settings">
             ⚙️
         </button>
-        
         <!-- Config slideover panel -->
         <div id="config-slideover" class="config-slideover">
             <div class="config-slideover-content">
@@ -24,7 +21,6 @@
                 </div>
                 <div class="config-body">
                     <button type="button" id="debug-toggle">Enable Debug Overlay</button>
-                    
                     <div class="config-item">
                         <label for="rotate-180">
                             <input type="checkbox" id="rotate-180" checked>
@@ -34,16 +30,14 @@
                 </div>
             </div>
         </div>
-        
         <h1>ET-3400 Seven Segment Reader</h1>
         <div id="video-wrapper">
             <video id="video" autoplay></video>
             <canvas id="canvas" class="hidden" width="640" height="480"></canvas>
-
         </div>
         <div>
-            <button type="button" id="calibrate">Start Calibration</button>
-            <div id="message">To begin, power on your ET-3400 and ensure all displays are visible and in focus on your webcam.</div>
+            <button type="button" id="calibrate">Capture Calibration Image</button>
+            <div id="message">To calibrate, you need to capture two images: one with all segments off (Power Button -> Standby) and one with all segments on (Short Segment Test Terminals).</div>
         </div>
         <div id="output"></div>
         <div id="history"></div>

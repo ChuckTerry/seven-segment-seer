@@ -19,7 +19,6 @@ h1 {
     display: none !important;
 }
 
-
 #video-wrapper {
     position: relative;
     float: left;
@@ -33,12 +32,11 @@ h1 {
         display: block;
         margin: 0 15px;
     }
-    
+
     video.rotated {
         transform: rotate(180deg);
     }
 }
-
 
 #history {
     height: 512px;
@@ -51,7 +49,7 @@ h1 {
 #message {
     font-size: 18px;
     margin: 10px;
-    text-align: left;;
+    text-align: left;
 }
 
 #output {
