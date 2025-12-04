@@ -633,7 +633,7 @@ export class SegmentDisplayReader extends EventTarget {
      * Samples background pixels so we can normalize frames shot in brighter or darker conditions.
      * 
      * @param {ImageData} currentData
-     * @returns {number}
+     * @returns {number} The estimated brightness offset in grayscale units between the calibration images and the current frame.
      */
     estimateAmbientOffset(currentData) {
         if (!this.backgroundMask || !this.backgroundMask.length) {
