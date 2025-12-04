@@ -314,6 +314,7 @@ export class SegmentDisplayReader extends EventTarget {
      * Applies a debug mask overlay to visualize segment detection.
      * 
      * @param {ImageData} currentData The current image data
+     * @param {number} ambientOffset The offset value to adjust ambient light threshold for segment detection
      */
     debugMask(currentData, ambientOffset = 0) {
         const { width } = this.canvas;
