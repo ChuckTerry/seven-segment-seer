@@ -1,0 +1,28 @@
+{
+  "name": "seven-segment-seer",
+  "version": "1.2.1",
+  "description": "ET-3400 Seven Segment Display Reader",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo "
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ChuckTerry/seven-segment-seer.git"
+  },
+  "keywords": [
+    "ET-3400",
+    "Seven",
+    "Segment",
+    "Reader"
+  ],
+  "author": "Chuck Terry <chuck.terry@outlook.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/ChuckTerry/seven-segment-seer/issues"
+  },
+  "homepage": "https://github.com/ChuckTerry/seven-segment-seer#readme",
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}
